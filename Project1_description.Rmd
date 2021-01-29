@@ -1,0 +1,320 @@
+---
+title: "Project 1 Description"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Overview
+
+This document contains instructions on Project 1 for STA 207 in Winter 2021. This document is made with `R markdown`. The `rmd` file to generate this document is available on the course website. 
+
+## Background
+
+In this project, we study the dataset from a very influential randomized experiment. The Tennesses  Student/Teacher Achievement Ratio study (a.k.a. Project STAR) was conducted in the late 1980s to evaluate the effect of class sizes on test scores. This dataset has been used as a classic examples in many textbooks and research papers. You are encouraged to read more about the experiment design and how others analyze this dataset. This document only provides a brief explanation of the dataset for this course project. 
+
+The study randomly assigned students to small classes, regular classes, and regular classes with a teacher's aide. In order to randomize properly, schools were enrolled only if they had enough student body to have at least one class of each type. Once the schools were enrolled, students were randomly assigned to the three types of classes, and one teacher was randomly assigned to each class. 
+
+The dataset contains scaled scores for math and reading from kindergarten to 3rd grade. We will only examine the math scores in 1st grade in this project. The primary question of interest is whether there is __any differences in math scaled scores in 1st grade across class types__, and if so, a secondary question of interest is __which class type is associated with the highest math scaled scores in 1st grade__. In particular, we will treat each teacher as the basic unit of our analysis. To put it in another way, we will treat each class (uniquely identified by its assigned teacher) as an observation. Noting that there are multiple students in each class, some data manipulation are warranted. 
+
+
+## Suggested outline 
+
+The following list provides one potential structure of the data analysis report. A detailed template for this project is provided in a separate RMD file. The  detailed template is provided as a learning tool for the first data analysis project in this course. There will not be any templates for future projects. 
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(gplots)
+
+library(tidyverse)
+```
+
+## 1. Introduce the data set and the questions of interest.
+
+
+"The dataset contains scaled scores for math and reading from kindergarten to 3rd grade. We will only examine the math scores in 1st grade in this project. The primary question of interest is whether there is __any differences in math scaled scores in 1st grade across class types__, and if so, a secondary question of interest is __which class type is associated with the highest math scaled scores in 1st grade__. In particular, we will treat each teacher as the basic unit of our analysis. To put it in another way, we will treat each class (uniquely identified by its assigned teacher) as an observation. Noting that there are multiple students in each class, some data manipulation are warranted."
+```{r}
+
+```
+
+
+## 2. Review the background of Project STAR, and **find the data set from the Internet**. 
+- Data was found here: https://dataverse.harvard.edu/dataset.xhtml?persistentId=hdl:1902.1/10766
+```{r}
+students = read.csv('STAR_Students.tab', sep='\t')
+#head(students)
+#colnames(students)
+length(rownames(students)) # total number of observations
+```
+
+## 3. Explore this dataset and generate summary statistics that you find informative, and explain your findings.  In particular,
+
+### First lets consider some data cleaning
+```{r}
+students_bu = students
+students$g1classtype = as.integer(students$g1classtype)
+students = students %>% filter(!is.na(g1tmathss))
+students = students %>% filter(!is.na(g1classtype))
+students = students %>% filter(!is.na(g1schid))
+
+#students$g1mathss = students[!is.na(students$g1mathss)]
+#pairwise.t.test(x=students$g1mathss, g=students$g1classtype, p.adjust.method = 'bonf')
+#head(students)
+length(rownames(students))
+```
+
+### a. obtain math scaled scores in the 1st grade with teachers as the unit,
+```{r}
+
+teach_agg = aggregate(list(students$g1tmathss, students$g1schid, students$g1classtype, students$g1classsize),
+          by = list(students$g1tchid),              
+          FUN = mean) 
+
+colnames(teach_agg) = c('g1tchid', 'g1tmathss', 'g1schid', 'g1classtype', 'g1classsize' )
+#teach_agg$class_type = teach_class_agg$x
+head(teach_agg)
+```
+
+### b. and investigate the relationship between school indicator, class types, and math scaled scores in 1st grade. 
+
+```{r}
+#boxplot(students$g1mathbsobjpct, as.factor(students$g1classtype))
+hist(teach_agg$g1tmathss)
+summary(as.factor(teach_agg$g1classtype))
+teach_agg$g1schid = as.factor(teach_agg$g1schid)
+teach_agg$g1classtype = as.factor(teach_agg$g1classtype)
+
+```
+
+```{r}
+ggplot(teach_agg, aes(x=g1classtype, y=g1tmathss, fill=g1tmathss)) +
+    geom_boxplot(alpha=0.7) +
+    stat_summary(fun=mean, geom="point", shape=20, size=5, color="blue", fill="black") + 
+    labs(title='Class Type vs Math Scaled Score', x='Class Type', y='Math Scaled Score')
+    
+```
+
+```{r}
+ggplot(teach_agg, aes(x=g1schid, y=g1tmathss, fill=g1tmathss)) +
+    geom_boxplot(alpha=0.7) +
+    stat_summary(fun=mean, geom="point", shape=20, size=2, color="blue", fill="black") +
+    labs(title='School ID vs Math Scaled Score', x='School ID', y='Math Scaled Score') +
+    theme(axis.text.x = element_text(angle = 90))
+
+
+```
+
+```{r}
+# Main effects plot
+plotmeans(g1tmathss~g1classtype,data=teach_agg,xlab="Class Type",ylab="Math Scaled Score", main="Main effect, Class Type") 
+```
+```{r}
+# Main effects plot
+?plotmeans
+plotmeans(g1tmathss~g1schid,data=teach_agg,n.label=FALSE,xlab="School ID",ylab="Math Scaled Score", main="Main effect, School ID") 
+```
+
+
+## 4.  Propose an appropriate model to answer the questions of interest. The model should include the school indicator as a factor/regressor to adjust for. 
+
+The null hypothesis for the primary question of interest is $H_0 : \alpha_1 = \alpha_2 = \alpha_3 = 0$, and the alternative is $H_a$ : not all $\alpha$s are zero. You can find the test statistic and p-value using `summary(anova.fit)`, if you save your fitted model as `anova.fit`. Please be sure specify the significance level and interpret your test result.  Explain any additional assumptions involved in this test. 
+
+
+```{r}
+length(unique(teach_agg$g1schid))
+```
+### a. Explain your notation. 
+- We can define a two-way ANOVA model as follows 
+- $Y_{ijk} = \mu_{..} + \alpha_{i} + \beta_{j} + \epsilon_{ijk}$, 
+- where the index $i$ represents the class type: small ($i=1$), regular ($i=2$), regular with aide ($i=3$), 
+- and the index $j$ represents the school indicator $j=1....76$ based on the result shown above. . 
+- $\alpha_i$ is the main effect of the factor class type.
+- $\beta_j$ is the main effect of the factor school ID.
+
+
+- You need to explain the rest of the parameters, state constraints on the parameters, and justify the choice of model (e.g., why no interaction terms). </span>
+
+
+#### b. State assumptions for your model. 
+```{r}
+hist(students$g1tmathss)
+```
+
+### c. Explain why your model is appropriate for this task. 
+- The interaction term is not considered, in other words the model is an additive model. This is fitting given the situation where the interaction term between school ID and class type ID should not be considered since it seems to not be meaningful since a teacher only has one class type which associates with one school.
+- In addtion, the computational demands of this command were too high and would require an HPC. 
+
+
+## 5.  Fit the proposed model in (4) and explain your results. 
+```{r}
+fit_tch_sch = lm(g1tmathss ~ g1schid + g1classtype, data = teach_agg)
+anova(fit_tch_sch)
+```
+
+#### Is it worth considering the interaction term?
+```{r}
+fit = aov(g1tmathss ~ g1classtype + g1schid + g1classtype:g1schid, data = teach_agg)
+summary(fit)
+```
+```{r}
+
+fit = aov(g1tmathss ~ g1classtype + g1schid, data = teach_agg)
+summary(fit)
+```
+
+
+## 6.  Conduct model diagnostics and/or sensitivity analysis. 
+```{r}
+plot(fit)
+boxcox(fit)
+#?boxcox
+```
+- There seem to be heavy tails on the residuals (based on the Normal QQ plot) and the Box-Cox transformation for linear models suggests that a $y^{-2}$ is suggested to be optimal transformation of our dependent variable. 
+
+```{r}
+fit2 = aov(g1tmathss^-2 ~ g1classtype + g1schid, data = teach_agg)
+summary(fit2)
+```
+### Pairwise t test to see what groups are best from our anova and lets use a few different p adjustment methods for multiple testing. 
+```{r}
+test=pairwise.t.test(teach_agg$g1tmathss^-2, teach_agg$g1classtype)
+test$p.value
+pairwise.t.test(teach_agg$g1tmathss^-2, teach_agg$g1classtype, p.adjust.method = 'bonf')
+pairwise.t.test(teach_agg$g1tmathss^-2, teach_agg$g1classtype, p.adjust.method = 'BH')
+
+
+
+alpha=0.05;
+T.ci=TukeyHSD(fit2,conf.level = 1-alpha)
+
+# The highest wage is in management, and the second largest is in technical
+get("g1classtype", T.ci)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit2)
+boxcox(fit2)
+```
+
+
+- Looks a lot better now based on the boxcox log likelihood plot. In addtion, there appear to be some improvements in the Normal QQ plot but there is no stark difference. 
+
+
+### Lets do this for all of the math scaled scores for the following years with grade 1 class type and school to see if the long term impact reported by other studies is true. If it isnt lets look at the corresponding years data instead as in the same school, class type, and math score for the same year.  
+```{r}
+my_star <- function(mathvar, classtypevar, schoolvar, teachervar){
+
+  students = read.csv('STAR_Students.tab', sep='\t')
+  #students$g1classtype = as.integer(students$c)
+  students = students %>% filter(!is.na(!!as.symbol(mathvar)))
+  students = students %>% filter(!is.na(!!as.symbol(teachervar)))
+  students = students %>% filter(!is.na(!!as.symbol(schoolvar)))
+  students = students %>% filter(!is.na(!!as.symbol(classtypevar)))
+  teach_agg <- aggregate(list(students[,mathvar], students[,schoolvar], students[,classtypevar]),
+        by = list(students[,teachervar]),              
+        FUN = mean) 
+  colnames(teach_agg) = c(teachervar, mathvar, schoolvar, classtypevar)
+  teach_agg$classtypevar = as.factor(teach_agg[,classtypevar])
+  teach_agg$schoolvar = as.factor(teach_agg[,schoolvar])
+  teach_agg$mathvar = teach_agg[,mathvar]
+
+  print(head(teach_agg))
+  fit_my_star = aov(mathvar ~ classtypevar + schoolvar, data = teach_agg)
+  return(teach_agg)
+  # transformation should be considered for every scenario seperately
+}
+
+my_star_stat<- function(agg, power,fit){
+  print(summary(fit))
+  par(mfrow=c(2,2))
+  plot(fit)
+  # Pairwise t test with different correction methods
+  print(pairwise.t.test(teach_agg$mathvar^power, teach_agg$classtypevar)$p.value)
+  print(pairwise.t.test(teach_agg$mathvar^power, teach_agg$classtypevar, p.adjust.method = 'bonf')$p.value)
+  print(pairwise.t.test(teach_agg$mathvar^power, teach_agg$classtypevar, p.adjust.method = 'BH')$p.value)
+  # One approach is to use the Tukey’s method to construction simultaneous confidence intervals for all pairwise comparisons.
+  alpha=0.05;
+  T.ci=TukeyHSD(fit,conf.level = 1-alpha)
+  print(T.ci$`teach_agg$classtypevar`)
+}
+
+teach_agg = my_star('g1tmathss', 'g1classtype', 'g1schid', 'g1tchid')
+fit = aov(teach_agg$mathvar ~ teach_agg$classtypevar + teach_agg$schoolvar);
+boxcox(fit)
+new_fit = aov(teach_agg$mathvar^-2 ~ teach_agg$classtypevar + teach_agg$schoolvar)
+boxcox(new_fit)
+my_star_stat(teach_agg, -2, new_fit)
+```
+#### Grade 2 with grade 1 class type, school, and teacher id (class grouping)
+```{r}
+teach_agg = my_star('g2tmathss', 'g1classtype', 'g1schid', 'g1tchid')
+fit = aov(teach_agg$mathvar ~ teach_agg$classtypevar + teach_agg$schoolvar);
+boxcox(fit)
+new_fit = aov(teach_agg$mathvar^-1 ~ teach_agg$classtypevar + teach_agg$schoolvar)
+boxcox(new_fit)
+my_star_stat(teach_agg, -1, new_fit)
+```
+
+#### Grade 3 with grade 1 class type, chool, and teacher id (class grouping)
+```{r}
+teach_agg = my_star('g3tmathss', 'g1classtype', 'g1schid', 'g1tchid')
+fit = aov(teach_agg$mathvar ~ teach_agg$classtypevar + teach_agg$schoolvar);
+boxcox(fit)
+new_fit = aov(log(teach_agg$mathvar) ~ teach_agg$classtypevar + teach_agg$schoolvar)
+boxcox(new_fit)
+# do this one custom
+teach_agg$g3tmathss = log(teach_agg$g3tmathss)
+my_star_stat(teach_agg, 1, new_fit)
+
+```
+
+#### Grade 2 with grade 2 class type, chool, and teacher id (class grouping)
+```{r}
+teach_agg = my_star('g2tmathss', 'g2classtype', 'g2schid', 'g2tchid')
+fit = aov(teach_agg$mathvar ~ teach_agg$classtypevar + teach_agg$schoolvar);
+boxcox(fit)
+new_fit = aov(teach_agg$mathvar^1 ~ teach_agg$classtypevar + teach_agg$schoolvar)
+boxcox(new_fit)
+my_star_stat(teach_agg, 1, new_fit)
+
+```
+
+#### Grade 3 with grade 3 class type, chool, and teacher id (class grouping)
+```{r}
+teach_agg = my_star('g3tmathss', 'g3classtype', 'g3schid', 'g3tchid')
+fit = aov(teach_agg$mathvar ~ teach_agg$classtypevar + teach_agg$schoolvar);
+boxcox(fit)
+new_fit = aov(log(teach_agg$mathvar) ~ teach_agg$classtypevar + teach_agg$schoolvar)
+boxcox(new_fit)
+# do this one custom
+teach_agg$g3tmathss = log(teach_agg$g3tmathss)
+my_star_stat(teach_agg, 1, new_fit)
+```
+
+### Lets also test our model of interest with a training and testing dataset to furhter evaluate it 
+```{r}
+
+## 75% of the sample size
+#smp_size <- floor(0.75 * nrow(teach_agg)))
+
+## set the seed to make your partition reproducible
+#set.seed(123)
+#train_ind <- sample(seq_len(nrow(teach_agg)), size = smp_size)
+
+#train <- teach_agg[train_ind, ]
+#test <- teach_agg[-train_ind, ]
+```
+
+
+
+
+## 7. Conclude your analysis with an discussion of your findings and caveats of your approach. 
+TODO
+- 
+- 
+
+
+
+
